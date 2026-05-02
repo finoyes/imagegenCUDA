@@ -1,4 +1,6 @@
-open project directory in the visual studios command promptx64 
+# imagegenCUDA
+
+open project directory in the visual studios command promptx64
 type code.
 which opens the project with CUDA compiler configurations
 build a task.json and paste
@@ -13,7 +15,7 @@ build a task.json and paste
             "args": [
                 "-g",
                 "-G",
-                "-ccbin", 
+                "-ccbin",
                 "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.xx.xxxx/bin/Hostx64/x64",
                 "${file}",
                 "-o",
