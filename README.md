@@ -1,11 +1,11 @@
 # imagegenCUDA
 
-open project directory in the visual studios command promptx64
-type code.
-which opens the project with CUDA compiler configurations
-build a task.json and paste
+Open the project in the Visual Studio x64 command prompt, then run `code .` to open it with the CUDA compiler configuration.
 
-"{
+Create `.vscode/tasks.json` with this content:
+
+```json
+{
     "version": "2.0.0",
     "tasks": [
         {
@@ -30,6 +30,7 @@ build a task.json and paste
             ]
         }
     ]
-}"
+}
+```
 
-then you can run your .cu files
+After that, you can build and run `.cu` files from VS Code.
