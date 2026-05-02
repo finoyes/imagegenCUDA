@@ -1,0 +1,33 @@
+open project directory in the visual studios command promptx64 
+type code.
+which opens the project with CUDA compiler configurations
+build a task.json and paste
+
+"{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build CUDA",
+            "type": "process",
+            "command": "nvcc",
+            "args": [
+                "-g",
+                "-G",
+                "-ccbin", 
+                "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.44.35207/bin/Hostx64/x64",
+                "${file}",
+                "-o",
+                "${fileDirname}/${fileBasenameNoExtension}.exe"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$nvcc"
+            ]
+        }
+    ]
+}"
+
+then you can run your .cu files
