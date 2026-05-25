@@ -8,8 +8,8 @@
       "args": [],
       "stopAtEntry": false,
       "externalConsole": true,
-      "cwd": "c:/Users/Admin/Documents/cudavs",
-      "program": "c:/Users/Admin/Documents/cudavs/build/Debug/outDebug",
+      "cwd": "c:/Users/Admin/Documents/imagegenCUDA",
+      "program": "c:/Users/Admin/Documents/imagegenCUDA/build/Debug/outDebug",
       "MIMode": "gdb",
       "miDebuggerPath": "gdb",
       "setupCommands": [
