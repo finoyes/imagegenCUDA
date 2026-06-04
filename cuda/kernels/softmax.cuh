@@ -1,0 +1,1 @@
+//converts the raw attention scores to probabilities using the softmax(kernel).
