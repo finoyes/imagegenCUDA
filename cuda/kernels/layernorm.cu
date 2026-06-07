@@ -164,4 +164,4 @@ void layernorm_backward(float* d_input, float* d_gamma, float* d_beta,
         d_input, d_gamma, d_beta, d_output, input, gamma, d_model, eps);
 }
 
-// read and document you open this next time baby.
+// read and document you open this next time baby. also verify......
