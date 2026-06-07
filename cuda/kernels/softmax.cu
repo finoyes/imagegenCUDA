@@ -63,6 +63,7 @@ void softmax(float* input, int rows, int cols){
 
 }
 
-void attention_softmax(){
-    
+void attention_softmax(float* scores, int batch, int heads, int seq_len){
+    int rows =batch * heads * seq_len;
+    softmax (scores, rows, seq_len); 
 }
