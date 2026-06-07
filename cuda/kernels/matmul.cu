@@ -1,3 +1,5 @@
+//matrix multiplication which is used everywhere in transformer.
+
 #include "matmul.cuh"
 #include <cuda_runtime.h>
 
