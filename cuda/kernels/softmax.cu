@@ -1,4 +1,4 @@
-// softmax function
+// softmax function -> converts the raw attention scores to probabilities.
 
 #include "softmax.cuh"
 #include <cuda_runtime.h>

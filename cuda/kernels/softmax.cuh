@@ -1,4 +1,4 @@
-//converts the raw attention scores to probabilities using the softmax(kernel).
+//converts the raw attention scores to probabilities using the softmax function.
 
 #pragma once
 #include <cuda_runtime.h>
