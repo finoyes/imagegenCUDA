@@ -46,10 +46,10 @@ void attention_forward(float* output, AttentionCache* cache, const float* input,
 //Three separate matrix multiplications, each (total × d_model) × (d_model × d_model) = (total × d_model). result stored in cache for backward pass use. most expensive in attention.
 
                         int n_qkv = total * d_model;// total elements to process.
-                        bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(cache->Q, p->b_Q, total, d_model);
+                        bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(cache->Q, p->b_Q, total, d_model); 
                         bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(cache->K, p->b_K, total, d_model);
                         bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(cache->V, p->b_V, total, d_model);
-                        //add bias to each projection, launches one per projection.
+                        //adds bias to each projection, launches one per projection.
 
                         float scale = 1.0f / sqrtf((float)d_k); // cast to float before sqrtf to avoid int sqrt, this scale factor prevemts the dot products from growing too large as d_k increases, which would push softmax into saturation and kill gradients.
 
@@ -70,7 +70,7 @@ Output scores is (batch*heads × seq × seq) — the raw attention scores.
                         bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(output, p->b_O, total, d_model);/*write.....*/
 
 
- }
+ } // issue in variable passing in bias addition kernel (total) which is "int" but being passed as "const float*" -->
 
  /*[{
 	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
