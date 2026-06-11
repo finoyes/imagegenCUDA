@@ -72,6 +72,6 @@ Output scores is (batch*heads × seq × seq) — the raw attention scores.
 						this allows the model to learn how to combine info fro mdiff heads., use diff buffer for the matrixmult() to prevent race.*/
 
 
- } // issue in variable passing in bias addition kernel (total) which is "int" but being passed as "const float*" --> removed the imput redundancy.
+ } // issue in variable passing in bias addition kernel (total) which is "int" but being passed as "const float*" --> removed the imput redundancy as there were 4 arguments and we passed offset argument in the add summation kernel.
 
 
