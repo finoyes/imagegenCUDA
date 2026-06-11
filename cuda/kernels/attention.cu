@@ -4,7 +4,7 @@
 #include <cuda_runtime.h>
 #include <math.h>
 
-__global__ void bias_summ_krln(float* output, const float* input, const float* bias, int rows, int cols){
+__global__ void bias_summ_krln(float* output, const float* bias, int rows, int cols){
 
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < rows * cols){
@@ -62,122 +62,15 @@ Output scores is (batch*heads × seq × seq) — the raw attention scores.
                         scale_kernel<<<(n_scores+threads-1)/threads, threads>>>(cache->scores, scale, n_scores); // scales all b * h * seq * seq score val by 1/sqrt(d_k).
 
 
-                        attention_softmax(cache->scores, batch, num_heads, seq_len);/*write.....*/
+                        attention_softmax(cache->scores, batch, num_heads, seq_len);/*applies softmax along the last dimension( the "key" dimension) of each score row. after this each row of seqxseq mtx sums to 1 - attention wieghts.*/
 
-                        batched_matrixmult(cache->scores, cache->V, output, batch * num_heads, seq_len, seq_len, d_k);/*write.....*/
+                        batched_matrixmult(cache->scores, cache->V, output, batch * num_heads, seq_len, seq_len, d_k);/*compute weighted sum of values: attention score * V, (b, h, s, s) x (b, h, s, d_k) = (b, h, s, d_k )
+						 the output is (b, s, d_model) when reshaped cuz h * d_k = d_model*/
 
                         matrixmult(output, p->W_O, output, total, d_model, d_model);
                         bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(output, p->b_O, total, d_model);/*write.....*/
 
 
- } // issue in variable passing in bias addition kernel (total) which is "int" but being passed as "const float*" -->
-
- /*[{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "167",
-	"severity": 8,
-	"message": "argument of type \"int\" is incompatible with parameter of type \"const float *\"",
-	"source": "C/C++",
-	"startLineNumber": 49,
-	"startColumn": 98,
-	"endLineNumber": 49,
-	"endColumn": 103,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-},{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "165",
-	"severity": 8,
-	"message": "too few arguments in function call",
-	"source": "C/C++",
-	"startLineNumber": 49,
-	"startColumn": 112,
-	"endLineNumber": 49,
-	"endColumn": 113,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-},{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "167",
-	"severity": 8,
-	"message": "argument of type \"int\" is incompatible with parameter of type \"const float *\"",
-	"source": "C/C++",
-	"startLineNumber": 50,
-	"startColumn": 98,
-	"endLineNumber": 50,
-	"endColumn": 103,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-},{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "165",
-	"severity": 8,
-	"message": "too few arguments in function call",
-	"source": "C/C++",
-	"startLineNumber": 50,
-	"startColumn": 112,
-	"endLineNumber": 50,
-	"endColumn": 113,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-},{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "167",
-	"severity": 8,
-	"message": "argument of type \"int\" is incompatible with parameter of type \"const float *\"",
-	"source": "C/C++",
-	"startLineNumber": 51,
-	"startColumn": 98,
-	"endLineNumber": 51,
-	"endColumn": 103,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-},{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "165",
-	"severity": 8,
-	"message": "too few arguments in function call",
-	"source": "C/C++",
-	"startLineNumber": 51,
-	"startColumn": 112,
-	"endLineNumber": 51,
-	"endColumn": 113,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-},{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "167",
-	"severity": 8,
-	"message": "argument of type \"int\" is incompatible with parameter of type \"const float *\"",
-	"source": "C/C++",
-	"startLineNumber": 70,
-	"startColumn": 96,
-	"endLineNumber": 70,
-	"endColumn": 101,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-},{
-	"resource": "/c:/Users/Admin/Documents/imagegenCUDA/cuda/kernels/attention.cu",
-	"owner": "C/C++: IntelliSense",
-	"code": "165",
-	"severity": 8,
-	"message": "too few arguments in function call",
-	"source": "C/C++",
-	"startLineNumber": 70,
-	"startColumn": 110,
-	"endLineNumber": 70,
-	"endColumn": 111,
-	"modelVersionId": 2262,
-	"origin": "extHost1"
-}]
-    
+ } // issue in variable passing in bias addition kernel (total) which is "int" but being passed as "const float*" --> removed the imput redundancy.
 
 
-fucking solve this issue next tiem you open. */
