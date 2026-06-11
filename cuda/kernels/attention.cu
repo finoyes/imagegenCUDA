@@ -68,7 +68,8 @@ Output scores is (batch*heads × seq × seq) — the raw attention scores.
 						 the output is (b, s, d_model) when reshaped cuz h * d_k = d_model*/
 
                         matrixmult(output, p->W_O, output, total, d_model, d_model);
-                        bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(output, p->b_O, total, d_model);/*write.....*/
+                        bias_summ_krln<<<(n_qkv+threads-1)/threads, threads>>>(output, p->b_O, total, d_model);/*project the concated multi-head outpt thru W_O -a d_model * d_model learned mixing mtx.
+						this allows the model to learn how to combine info fro mdiff heads., use diff buffer for the matrixmult() to prevent race.*/
 
 
  } // issue in variable passing in bias addition kernel (total) which is "int" but being passed as "const float*" --> removed the imput redundancy.
