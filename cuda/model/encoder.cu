@@ -28,4 +28,20 @@ __global__ void patch_extractor_kernel(
         int iy = ph * patch_size + py;// absolute y in the full image
         int ix = pw * patch_size + px;// absolute x in the full image
 
+         patches[b * (num_patches_h * num_patches_h) * patch_dim + p * patch_dim + d] = images[b * C * H * W + c * H * W + iy * W + ix];
+         //destination indext, flat row-major for (batch, num_patches, patch_dim), source index : NCHW format- b*C*H*W skips to the right batch item, c*H*W skips to the right channel, iy*w + ix is the 2D pixel position. 
+
+         
     }
+
+__global__  void add_positional_embedding_kernel(float* output, const float* pos_emb, int batch, int num_patches, int d_model){
+            
+            int idx = blockIdx.x * blockDim.x + threadIdx.x;// idx is a flat index over the entire (batch x num_patches x d_model) output tensor
+            if(idx >= batch * num_patches * d_model) return;
+            int p = (idx / d_model) % num_patches;// idx/d_model, which token(batch_item*num_patches + patch_index) and then %num_patches strips out the batch dimension to get hte patch position
+            output[idx] += pos_emb[p * d_model + (idx % d_model)];// idx % d_model features dimension.
+}
+
+void encoder_fwd(){
+    
+}
