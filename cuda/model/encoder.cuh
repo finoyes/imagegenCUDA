@@ -27,3 +27,25 @@ int patch_dim;// patch_size * patch_size * channels
 
 };// pure config as no GPU pointers
 
+// Forward: images -> token sequence
+// images: (batch x C x H x W) device pointer
+// output: (batch x num_patches x d_model)
+void encoder_forward(
+    float* output,
+    const float* images,
+    const EncoderParams* params,
+    const EncoderConfig* cfg,
+    int batch_size
+);
+
+void encoder_backward(
+    float* d_images,
+    EncoderParams* params,
+    const float* d_output,
+    const float* images,
+    const EncoderConfig* cfg,
+    int batch_size
+);
+
+// Initialize with Kaiming uniform (patches) and sinusoidal (positions)
+void encoder_init(EncoderParams* params, const EncoderConfig* cfg);
