@@ -34,3 +34,19 @@ struct AttentionCache{
     
 }; // computed during fwd pass and must be kept alive till backward.
 // "scores" is the post-attention weights
+
+void attention_forward(
+    float* output,              // (batch x seq x d_model)
+    AttentionCache* cache,      // filled in for backward use
+    const float* input,         // (batch x seq x d_model)
+    const AttentionParams* p,
+    int batch, int seq_len, int d_model, int num_heads
+);
+
+void attention_backward(
+    float* d_input,
+    AttentionParams* p,
+    const float* d_output,
+    const AttentionCache* cache,
+    int batch, int seq_len, int d_model, int num_heads
+);

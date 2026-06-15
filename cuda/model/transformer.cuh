@@ -28,6 +28,13 @@ struct TransformerBlockParams {
     float* d_ln2_gamma; float* d_ln2_beta;
 };// two layernorm per block one before attention and one before FFN each norm has it's own gamma and beta.
 
+struct TransformerParams {
+    TransformerBlockParams* blocks;   // array of num_layers blocks
+    int num_layers;
+    int d_model;
+    int num_heads;
+    int d_ff;
+};
 struct TransformerCache {
     float** ln1_out;
     float** attn_out;
@@ -37,3 +44,19 @@ struct TransformerCache {
 };/*float** — array of pointers. ln1_out[l] gives the layer-norm output for layer l.
 ffn_mid — the intermediate activation between the two FFN linear layers (after GELU). Needed for backward through GELU.
 One AttentionCache per layer.*/
+
+void transformer_forward(
+    float* output,
+    TransformerCache* cache,
+    const float* input,
+    const TransformerParams* params,
+    int batch, int seq_len
+);
+
+void transformer_backward(
+    float* d_input,
+    TransformerParams* params,
+    const float* d_output,
+    const TransformerCache* cache,
+    int batch, int seq_len
+);
