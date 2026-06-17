@@ -34,3 +34,5 @@ Create `.vscode/tasks.json` with this content:
 ```
 
 After that, you can build and run `.cu` or CUDA  files from VS Code.
+
+or just open the project with visual studios.
