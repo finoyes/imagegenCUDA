@@ -24,6 +24,13 @@ __global__ void scale_grads_kernel(float* x, float scale, int n) {
     if (i < n) x[i] *= scale;
 }
 
+/*__global__ void scale_gradient_kernel(float* grad, float scale, int n) {
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx < n) {
+        grad[idx] *= scale;
+    }
+}
+*/
 void clip_grad_norm(AdamWOptimizer* opt, float max_norm) {
     // 1. Compute global norm across all parameter gradients
     float* d_norm_sq;
@@ -46,7 +53,7 @@ void clip_grad_norm(AdamWOptimizer* opt, float max_norm) {
         float scale = max_norm / norm;
         for (int i = 0; i < (int)opt->gradient.size(); i++) {
             int n = opt->sizes[i];
-            scale_gradient_kernel<<<(n+255)/256, 256>>>(opt->gradient[i], scale, n);//prblm
+            scale_grads_kernel<<<(n+255)/256, 256>>>(opt->gradient[i], scale, n);//prblm
         }
     }
 }
