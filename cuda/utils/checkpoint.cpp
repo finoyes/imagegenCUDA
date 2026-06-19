@@ -104,3 +104,5 @@ bool checkpoint_exists(const std::string& path) {
     if (f) { fclose(f); return true; }
     return false;
 }
+
+//explain the file.
