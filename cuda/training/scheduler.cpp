@@ -1,6 +1,7 @@
 #include "scheduler.h"
 #include <cuda_runtime.h>
 #include "optimizer.cuh"
+#define _USE_MATH_DEFINES
 #include <math.h>
 
 LRScheduler scheduler_create(float max_lr, float min_lr,

@@ -1,6 +1,7 @@
 #include "checkpoint.h"
 #include <stdio.h>
 #include <stdlib.h>
+#include <vector>
 #include <cuda_runtime.h>
 
 #define MAGIC   0x54524E47u  // "TRNG"
@@ -29,8 +30,10 @@ void checkpoint_save(
     if (!f) { fprintf(stderr, "cannot open %s\n", path.c_str()); return; }
 
     // Header
-    fwrite(&MAGIC,   sizeof(uint32_t), 1, f);
-    fwrite(&VERSION, sizeof(int),      1, f);
+    uint32_t magic = MAGIC;
+    int version = VERSION;
+    fwrite(&magic,   sizeof(uint32_t), 1, f);
+    fwrite(&version, sizeof(int),      1, f);
     fwrite(&cfg,     sizeof(ModelConfig), 1, f);
     fwrite(&step,    sizeof(int),      1, f);
 
@@ -38,8 +41,8 @@ void checkpoint_save(
     int NP = (cfg.image_size / cfg.patch_size) * (cfg.image_size / cfg.patch_size);
 
     // Encoder weights
-    write_tensor(f, enc->patch_proj_W, PD * D);
-    write_tensor(f, enc->patch_proj_b, D);
+    write_tensor(f, enc->patch_projection_w, PD * D);
+    write_tensor(f, enc->patch_projection_b, D);
     write_tensor(f, enc->pos_embedding, NP * D);
 
     // Transformer weights (all layers)
@@ -79,8 +82,8 @@ int checkpoint_load(
     int D = cfg->d_model, PD = cfg->patch_size * cfg->patch_size * cfg->channels;
     int NP = (cfg->image_size / cfg->patch_size) * (cfg->image_size / cfg->patch_size);
 
-    read_tensor(f, enc->patch_proj_W, PD * D);
-    read_tensor(f, enc->patch_proj_b, D);
+    read_tensor(f, enc->patch_projection_w, PD * D);
+    read_tensor(f, enc->patch_projection_b, D);
     read_tensor(f, enc->pos_embedding, NP * D);
 
     for (int l = 0; l < tr->num_layers; l++) {

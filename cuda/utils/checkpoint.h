@@ -2,9 +2,9 @@
 
 #pragma once
 #include <string>
-#include "../cuda/model/transformer.cuh"
-#include "../cuda/model/encoder.cuh"
-#include "../cuda/model/decoder.cuh"
+#include "../model/transformer.cuh"
+#include "../model/encoder.cuh"
+#include "../model/decoder.cuh"
 
 struct ModelConfig {
     int image_size, patch_size, channels;
