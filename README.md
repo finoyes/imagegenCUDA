@@ -39,18 +39,17 @@ or just open the project with visual studios.
 
 
 to run this program
-## 1. Build everything
-cd build
+bash
+# 1. Build
+mkdir build && cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release
+make -j$(nproc)
 
-## 2. Put some images in data/raw/ (at least a few hundred)
+# 2. Preprocess your images
+./preprocess  # reads data/raw/, writes data/processed/
 
-## 3. Preprocess once
-./preprocess
+# 3. Train
+./train       # reads config.json, logs to logs/, saves to checkpoints/
 
-## 4. Train (will auto-resume from checkpoint if one exists)
-./train
-
-## 5. Generate from a checkpoint
-./generate checkpoints/latest.bin data/raw/some_image.jpg output.png
+# 4. Generate / reconstruct
+./generate checkpoints/latest.bin path/to/image.jpg output.png
