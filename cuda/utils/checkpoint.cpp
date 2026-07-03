@@ -41,8 +41,8 @@ void checkpoint_save(
     int NP = (cfg.image_size / cfg.patch_size) * (cfg.image_size / cfg.patch_size);
 
     // Encoder weights
-    write_tensor(f, enc->patch_projection_w, PD * D);
-    write_tensor(f, enc->patch_projection_b, D);
+    write_tensor(f, enc->patch_proj_W, PD * D);
+    write_tensor(f, enc->patch_proj_b, D);
     write_tensor(f, enc->pos_embedding, NP * D);
 
     // Transformer weights (all layers)
@@ -82,8 +82,8 @@ int checkpoint_load(
     int D = cfg->d_model, PD = cfg->patch_size * cfg->patch_size * cfg->channels;
     int NP = (cfg->image_size / cfg->patch_size) * (cfg->image_size / cfg->patch_size);
 
-    read_tensor(f, enc->patch_projection_w, PD * D);
-    read_tensor(f, enc->patch_projection_b, D);
+    read_tensor(f, enc->patch_proj_W, PD * D);
+    read_tensor(f, enc->patch_proj_b, D);
     read_tensor(f, enc->pos_embedding, NP * D);
 
     for (int l = 0; l < tr->num_layers; l++) {

@@ -22,7 +22,7 @@ return 0.5f * (1.0f + tanh_t) + 0.5f * x * sech2_t * dt_dx;
 
 __global__ void GeLU_fwd_kernel(float* output, const float* in, int n) {
 
-    int i = threadIdx.x * blockDim.x + threadIdx.x; //1d index formula convverts 2D grid position(block, thread) into a single flat index. => eg. 2B and 5Th, blockDim 256 -> i = 2*256 + 5 = 517.
+    int i = blockIdx.x * blockDim.x + threadIdx.x; //1d index formula convverts 2D grid position(block, thread) into a single flat index. => eg. 2B and 5Th, blockDim 256 -> i = 2*256 + 5 = 517.
     if (i < n){
        output[i] = GeLU_val(in[i]);
     }
@@ -31,28 +31,50 @@ __global__ void GeLU_fwd_kernel(float* output, const float* in, int n) {
 
 __global__ void GeLU_bwd_kernel(float* d_in, const float* d_out, const float* input, int n) {
 
-    int i = threadIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
     if (i < n){
        d_in[i] = d_out[i] * GeLU_deriv(input[i]);
     }
 
 }
 
-__global__ void ReLU_fwd_kernel(float* d_in, const float* d_out, const float* in, int n){
+__global__ void ReLU_fwd_kernel(float* output, const float* input, int n) {
 
-    int i = threadIdx.x * blockDim.x + threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
     if(i < n){
-      d_in[i] = (in[i] > 0.0f) ? d_out[i] : 0.0f; 
+      output[i] = fmaxf(0.0f, input[i]);
     }
 
 }/* ReLU(x) = x>=0 => 1
               x<=0 => 0
  d(ReLU)/dx = x>=0 => 1 */
 
- void GeLU_fwd(float* output, const float* input, int n){
+__global__ void ReLU_bwd_kernel(float* d_input, const float* d_output, const float* input, int n) {
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    if (i < n) {
+        d_input[i] = (input[i] > 0.0f) ? d_output[i] : 0.0f;
+    }
+}
+
+void GeLU_forward(float* output, const float* input, int n) {
 
     int threads = 256;
     GeLU_fwd_kernel<<<(n + threads - 1) / threads, threads>>>(output, input, n); //ceiling division inthe first kernel dimension equivalent to ceil(n/256).
     //ensure enough bloacks to cover all n elements, even if not divisible by 256.
 
- }
+}
+
+void GeLU_backward(float* d_input, const float* d_output, const float* input, int n) {
+    int threads = 256;
+    GeLU_bwd_kernel<<<(n + threads - 1) / threads, threads>>>(d_input, d_output, input, n);
+}
+
+void ReLU_forward(float* output, const float* input, int n) {
+    int threads = 256;
+    ReLU_fwd_kernel<<<(n + threads - 1) / threads, threads>>>(output, input, n);
+}
+
+void ReLU_backward(float* d_input, const float* d_output, const float* input, int n) {
+    int threads = 256;
+    ReLU_bwd_kernel<<<(n + threads - 1) / threads, threads>>>(d_input, d_output, input, n);
+}

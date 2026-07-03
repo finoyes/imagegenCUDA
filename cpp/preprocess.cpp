@@ -9,6 +9,17 @@
 
 namespace fs = std::filesystem;
 
+int main(int argc, char** argv) {
+    if (argc < 3) {
+        fprintf(stderr, "Usage: preprocess <src_dir> <dst_dir>\n");
+        return 1;
+    }
+
+    PreprocessConfig cfg;
+    preprocess_dataset(argv[1], argv[2], cfg);
+    return 0;
+}
+
 void preprocess_dataset(
     const std::string& src_dir,
     const std::string& dst_dir,

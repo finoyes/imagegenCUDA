@@ -27,5 +27,3 @@ float scheduler_get_lr(const LRScheduler* s, int step) {
 void scheduler_step(const LRScheduler* s, AdamWOptimizer* opt, int step) {
     opt->lr = scheduler_get_lr(s, step);
 }
-
-// problems

@@ -2749,10 +2749,10 @@ cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j$(nproc)
 
 # 2. Preprocess your images
-./preprocess  # reads data/raw/, writes data/processed/
+.\Release\preprocess.exe ..\data\raw ..\data\processed  # reads data/raw/, writes data/processed/
 
 # 3. Train
-./train       # reads config.json, logs to logs/, saves to checkpoints/
+.\Release\train.exe       # reads config.json, logs to logs/, saves to checkpoints/
 
 # 4. Generate / reconstruct
 ./generate checkpoints/latest.bin path/to/image.jpg output.png

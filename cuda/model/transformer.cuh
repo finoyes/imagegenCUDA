@@ -36,14 +36,14 @@ struct TransformerParams {
     int d_ff;
 };
 struct TransformerCache {
-    float** ln1_out;
-    float** attn_out;
-    float** ln2_out;
-    float** ffn_mid;
+    float** ln1_out;        // (num_layers) layer-norm 1 outputs
+    float** attn_out;       // (num_layers) attention sublayer outputs
+    float** ln2_out;        // (num_layers) layer-norm 2 outputs
+    float** ffn_mid;        // (num_layers) post-GeLU FFN intermediate (d_ff)
+    float** ffn_pre_gelu;   // (num_layers) pre-GeLU FFN intermediate — needed for GeLU backward
+    float** x_after_attn;   // (num_layers) residual after attention (= input to LN2) — needed for LN2 backward
     AttentionCache* attn_caches;
-};/*float** — array of pointers. ln1_out[l] gives the layer-norm output for layer l.
-ffn_mid — the intermediate activation between the two FFN linear layers (after GELU). Needed for backward through GELU.
-One AttentionCache per layer.*/
+};
 
 void transformer_forward(
     float* output,

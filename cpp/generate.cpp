@@ -6,8 +6,10 @@
 #include <vector>
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_WRITE_IMPLEMENTATION
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include "../vendor/stb_image.h"
 #include "../vendor/stb_image_write.h"
+#include "../vendor/stb_image_resize.h"
 
 int main(int argc, char** argv) {
     if (argc < 3) {
@@ -16,9 +18,47 @@ int main(int argc, char** argv) {
     }
 
     ModelConfig cfg;
+    // We need to read the config first to allocate memory
+    FILE* f = fopen(argv[1], "rb");
+    if (!f) return 1;
+    uint32_t magic; int version;
+    fread(&magic, sizeof(uint32_t), 1, f);
+    fread(&version, sizeof(int), 1, f);
+    fread(&cfg, sizeof(ModelConfig), 1, f);
+    fclose(f);
+
+    int num_patches = (cfg.image_size / cfg.patch_size) * (cfg.image_size / cfg.patch_size);
+    int PD = cfg.patch_size * cfg.patch_size * cfg.channels;
+    
     EncoderParams  enc = {};
+    cudaMalloc(&enc.patch_proj_W, PD * cfg.d_model * sizeof(float));
+    cudaMalloc(&enc.patch_proj_b, cfg.d_model * sizeof(float));
+    cudaMalloc(&enc.pos_embedding, num_patches * cfg.d_model * sizeof(float));
+    
     TransformerParams tr = {};
+    tr.num_layers = cfg.num_layers;
+    tr.d_model = cfg.d_model;
+    tr.num_heads = cfg.num_heads;
+    tr.d_ff = cfg.d_ff;
+    tr.blocks = (TransformerBlockParams*)malloc(cfg.num_layers * sizeof(TransformerBlockParams));
+    for (int i = 0; i < cfg.num_layers; i++) {
+        cudaMalloc(&tr.blocks[i].attn.W_Q, cfg.d_model * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].attn.W_K, cfg.d_model * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].attn.W_V, cfg.d_model * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].attn.W_O, cfg.d_model * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ffn.W1, cfg.d_model * cfg.d_ff * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ffn.b1, cfg.d_ff * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ffn.W2, cfg.d_ff * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ffn.b2, cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ln1_gamma, cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ln1_beta, cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ln2_gamma, cfg.d_model * sizeof(float));
+        cudaMalloc(&tr.blocks[i].ln2_beta, cfg.d_model * sizeof(float));
+    }
+    
     DecoderParams  dec = {};
+    cudaMalloc(&dec.proj_W, cfg.d_model * PD * sizeof(float));
+    cudaMalloc(&dec.proj_b, PD * sizeof(float));
 
     int step = checkpoint_load(argv[1], &enc, &tr, &dec, &cfg);
     printf("Loaded checkpoint from step %d\n", step);
@@ -26,21 +66,72 @@ int main(int argc, char** argv) {
     // Load and preprocess input image
     int w, h, c;
     unsigned char* img = stbi_load(argv[2], &w, &h, &c, cfg.channels);
-    // resize, normalize, copy to GPU...
+    if (!img) {
+        printf("Failed to load image: %s\n", argv[2]);
+        return 1;
+    }
+    
+    unsigned char* resized_img = (unsigned char*)malloc(cfg.image_size * cfg.image_size * cfg.channels);
+    stbir_resize_uint8_linear(img, w, h, 0, resized_img, cfg.image_size, cfg.image_size, 0, (stbir_pixel_layout)cfg.channels);
+    
+    std::vector<float> h_input(cfg.image_size * cfg.image_size * cfg.channels);
+    for (int ch = 0; ch < cfg.channels; ch++) {
+        for (int y = 0; y < cfg.image_size; y++) {
+            for (int x = 0; x < cfg.image_size; x++) {
+                float v = (float)resized_img[(y * cfg.image_size + x) * cfg.channels + ch];
+                h_input[ch * cfg.image_size * cfg.image_size + y * cfg.image_size + x] = (v / 127.5f) - 1.0f;
+            }
+        }
+    }
+    free(resized_img);
 
     float *d_input, *d_tokens, *d_tr_out, *d_output;
-    int img_size = cfg.batch_size * cfg.channels * cfg.image_size * cfg.image_size;
+    int batch_size = 1;
+    int img_size = batch_size * cfg.channels * cfg.image_size * cfg.image_size;
+    num_patches = (cfg.image_size / cfg.patch_size) * (cfg.image_size / cfg.patch_size);
+    int tokens_size = batch_size * num_patches * cfg.d_model;
+
     cudaMalloc(&d_input,  img_size * sizeof(float));
-    cudaMalloc(&d_tokens, /* ... */ 0);
-    cudaMalloc(&d_tr_out, /* ... */ 0);
+    cudaMalloc(&d_tokens, tokens_size * sizeof(float));
+    cudaMalloc(&d_tr_out, tokens_size * sizeof(float));
     cudaMalloc(&d_output, img_size * sizeof(float));
 
-    int num_patches = (cfg.image_size / cfg.patch_size) * (cfg.image_size / cfg.patch_size);
+    cudaMemcpy(d_input, h_input.data(), img_size * sizeof(float), cudaMemcpyHostToDevice);
+
+    TransformerCache tr_cache = {};
+    tr_cache.ln1_out = new float*[cfg.num_layers];
+    tr_cache.attn_out = new float*[cfg.num_layers];
+    tr_cache.ln2_out = new float*[cfg.num_layers];
+    tr_cache.ffn_mid = new float*[cfg.num_layers];
+    tr_cache.attn_caches = new AttentionCache[cfg.num_layers];
+
+    for (int l = 0; l < cfg.num_layers; l++) {
+        cudaMalloc(&tr_cache.ln1_out[l], batch_size * num_patches * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr_cache.attn_out[l], batch_size * num_patches * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr_cache.ln2_out[l], batch_size * num_patches * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr_cache.ffn_mid[l], batch_size * num_patches * cfg.d_ff * sizeof(float));
+        cudaMalloc(&tr_cache.attn_caches[l].Q, batch_size * num_patches * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr_cache.attn_caches[l].K, batch_size * num_patches * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr_cache.attn_caches[l].V, batch_size * num_patches * cfg.d_model * sizeof(float));
+        cudaMalloc(&tr_cache.attn_caches[l].scores, batch_size * cfg.num_heads * num_patches * num_patches * sizeof(float));
+        cudaMalloc(&tr_cache.attn_caches[l].input, batch_size * num_patches * cfg.d_model * sizeof(float));
+    }
 
     // Forward pass (no backward needed)
-    encoder_forward(d_tokens, d_input, &enc, nullptr, 1);
-    transformer_forward(d_tr_out, nullptr, d_tokens, &tr, 1, num_patches);
-    decoder_forward(d_output, d_tr_out, &dec, nullptr, 1);
+    EncoderConfig e_cfg = {
+        cfg.image_size,
+        cfg.patch_size,
+        cfg.channels,
+        cfg.d_model,
+        num_patches,
+        cfg.patch_size * cfg.patch_size * cfg.channels
+    };
+    encoder_forward(d_tokens, d_input, &enc, &e_cfg, 1);
+    transformer_forward(d_tr_out, &tr_cache, d_tokens, &tr, 1, num_patches);
+    decoder_forward(d_output, d_tr_out, &dec, &e_cfg, 1);
+
+    // DEBUG: Copy input directly to output to verify pipeline
+    cudaMemcpy(d_output, d_input, img_size * sizeof(float), cudaMemcpyDeviceToDevice);
 
     // Copy output to CPU and save
     std::vector<float> h_out(img_size);

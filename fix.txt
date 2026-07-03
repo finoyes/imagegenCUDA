@@ -1,0 +1,64 @@
+The problems
+1. Loss is not decreasing — it's flat/oscillating
+Step 3000: 0.350
+Step 3050: 0.195  ← sudden drop
+Step 3100: 0.380  ← jumps back up
+Step 3200: 0.362
+Step 3264: 0.426  ← actually going UP
+A healthy loss curve should look like a slope going consistently downward. Yours is bouncing randomly between 0.19 and 0.45 with no clear trend. After 3264 steps the model has learned almost nothing.
+2. You're only on epoch 3
+Step 3000 → epoch 0
+Step 3071 → epoch 1
+Step 3141 → epoch 2
+Step 3213 → epoch 3
+Each epoch is only about 70 steps, which means your dataset has only about 70 batches. With batch_size=32 from your config.json that means roughly:
+70 batches × 32 images = ~2240 images total
+That's a very small dataset. The model sees the same 2240 images over and over but still isn't learning.
+3. Loss started at ~0.35 and is still at ~0.35-0.42
+This means the model is essentially outputting the same thing every step — it hasn't learned to reconstruct anything meaningful. The expected starting loss for normalized images should drop significantly within the first 1000 steps.
+
+What's wrong and how to fix it
+Problem A — The backward pass is incomplete
+Looking back at the reference transformer.cu, the backward pass was explicitly left incomplete:
+cppvoid transformer_backward(...) {
+    for (int l = params->num_layers - 1; l >= 0; l--) {
+        // Each step mirrors the forward pass in reverse
+        // Omitted for brevity
+    }
+}
+If your backward pass isn't actually computing gradients, the weights never update, which explains the flat loss perfectly. Check your actual transformer_backward and attention_backward implementations — if they have empty loop bodies or nullptr placeholders, that's your problem.
+Problem B — Dataset is too small
+2240 images is not enough. You need at minimum 5000-10000 images. Go back to the dataset section and download Tiny ImageNet or CelebA — both have 60,000-200,000 images.
+Problem C — Verify gradients are actually flowing
+Add this debug check temporarily in your training loop right after the backward pass:
+cpp// After backward pass, before optimizer step
+// Copy one gradient to CPU and print its norm
+float* d_grad = enc_params.d_patch_proj_W;  // pick any gradient
+int grad_size = cfg.patch_size * cfg.patch_size * cfg.channels * cfg.d_model;
+
+std::vector<float> h_grad(grad_size);
+cudaMemcpy(h_grad.data(), d_grad, grad_size * sizeof(float), cudaMemcpyDeviceToHost);
+
+float grad_norm = 0.0f;
+for (float g : h_grad) grad_norm += g * g;
+grad_norm = sqrtf(grad_norm);
+
+printf("Gradient norm: %f\n", grad_norm);
+The output tells you exactly what's happening:
+OutputMeaningGradient norm: 0.000000Backward pass not working — weights will never updateGradient norm: nanExploding gradients — something is wrong with your mathGradient norm: 0.1 - 10.0Healthy — gradients are flowing correctly
+
+What healthy loss should look like
+For your config on a proper dataset of 50,000+ images:
+Step 1:     loss ≈ 0.80-1.0   (random weights)
+Step 100:   loss ≈ 0.60-0.70  (fast initial drop)
+Step 500:   loss ≈ 0.45-0.55
+Step 1000:  loss ≈ 0.35-0.45
+Step 3000:  loss ≈ 0.25-0.35  (you are here but not dropping)
+Step 10000: loss ≈ 0.15-0.25
+Step 50000: loss ≈ 0.05-0.15  (good reconstructions)
+Your loss at step 3000 should be around 0.25-0.35 AND still dropping. The fact that it's flat tells us the model stopped learning almost immediately.
+
+Most likely root cause
+The incomplete backward pass in the reference code is almost certainly the issue. Share your actual transformer_backward, attention_backward, and decoder_backward implementations and I can tell you exactly what's missing or broken.
+
+do push all the things like dont push build folder4

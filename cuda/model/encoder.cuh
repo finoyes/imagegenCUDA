@@ -7,12 +7,12 @@
 
 struct EncoderParams{
 
-float* patch_projection_w; // maps patch_dim * d_model projection. linear projection layer
-float* patch_projection_b; //(d_model) bias
+float* patch_proj_W; // maps patch_dim * d_model projection. linear projection layer
+float* patch_proj_b; //(d_model) bias
 float* pos_embedding;// (num_patched x d_model). one d_model Dim vec per patch position, learned; 
 float* cls_token;// ( d_model,)
-float* d_patch_projection_W;
-float* d_patch_projection_b;
+float* d_patch_proj_W;
+float* d_patch_proj_b;
 float* d_pos_embedding;
 };
 

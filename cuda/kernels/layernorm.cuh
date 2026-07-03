@@ -1,3 +1,5 @@
+#pragma once
+
 //normalizes the layers of the transformer to improve training stability and convergenc(kernel).
 
 void layernorm_forward(

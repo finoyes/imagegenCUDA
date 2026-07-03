@@ -29,8 +29,9 @@ void decoder_forward(
 void decoder_backward(
     float* d_input,
     DecoderParams* params,
-    const float* d_output,
-    const float* input,
+    const float* d_output,   // gradient w.r.t. reconstructed image
+    const float* output,     // forward output (clamped image) — needed for clamp backward
+    const float* input,      // forward input (token sequence) — needed for dW
     const EncoderConfig* cfg,
     int batch
 );

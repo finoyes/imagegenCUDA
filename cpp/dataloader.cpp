@@ -6,6 +6,8 @@
 #include <numeric>
 #include <random>
 #include <cstring>
+#include <fstream>
+#include <stdexcept>
 
 namespace fs = std::filesystem;
 
@@ -16,11 +18,19 @@ DataLoader::DataLoader(const std::string& dir,
       image_size_(image_size), channels_(channels), aug_(aug),
       current_idx_(0), active_buf_(0)
 {
-    // Gather all image file paths
+    // Gather supported dataset files.
     for (auto& entry : fs::directory_iterator(dir))
         if (entry.path().extension() == ".jpg" ||
+            entry.path().extension() == ".jpeg" ||
             entry.path().extension() == ".png")
             file_list_.push_back(entry.path().string());
+        else if (entry.path().extension() == ".bin")
+            file_list_.push_back(entry.path().string());
+
+    if (file_list_.empty()) {
+        throw std::runtime_error("DataLoader found no supported files in " + dir +
+                                 " (expected .bin, .jpg, .jpeg, or .png)");
+    }
 
     indices_.resize(file_list_.size());
     std::iota(indices_.begin(), indices_.end(), 0);
@@ -50,24 +60,40 @@ DataLoader::~DataLoader() {
 }
 
 void DataLoader::load_and_augment(const std::string& path, float* out) {
-    int w, h, c;
-    unsigned char* data = stbi_load(path.c_str(), &w, &h, &c, channels_);
-    if (!data) return;
+    if (fs::path(path).extension() == ".bin") {
+        std::ifstream in(path, std::ios::binary);
+        if (!in.is_open()) {
+            throw std::runtime_error("Failed to open dataset file: " + path);
+        }
 
-    // Resize to image_size_ x image_size_ using nearest-neighbor (simple)
-    // In production: use bilinear interpolation
-    for (int ch = 0; ch < channels_; ch++)
-        for (int y = 0; y < image_size_; y++)
-            for (int x = 0; x < image_size_; x++) {
-                int src_y = y * h / image_size_;
-                int src_x = x * w / image_size_;
-                int src_idx = (src_y * w + src_x) * channels_ + ch;
-                // Normalize to [-1, 1]
-                out[ch * image_size_ * image_size_ + y * image_size_ + x]
-                    = (data[src_idx] / 255.0f - aug_.mean[ch]) / aug_.std[ch];
-            }
+        const size_t expected_floats = (size_t)channels_ * image_size_ * image_size_;
+        in.read(reinterpret_cast<char*>(out), expected_floats * sizeof(float));
+        if (in.gcount() != static_cast<std::streamsize>(expected_floats * sizeof(float))) {
+            fprintf(stderr, "[DataLoader] Bad .bin file (expected %zu bytes, got %lld): %s\n",
+                    expected_floats * sizeof(float),
+                    (long long)in.gcount(), path.c_str());
+            throw std::runtime_error("Unexpected size while reading dataset file: " + path);
+        }
+    } else {
+        int w, h, c;
+        unsigned char* data = stbi_load(path.c_str(), &w, &h, &c, channels_);
+        if (!data) return;
 
-    stbi_image_free(data);
+        // Resize to image_size_ x image_size_ using nearest-neighbor (simple)
+        // In production: use bilinear interpolation
+        for (int ch = 0; ch < channels_; ch++)
+            for (int y = 0; y < image_size_; y++)
+                for (int x = 0; x < image_size_; x++) {
+                    int src_y = y * h / image_size_;
+                    int src_x = x * w / image_size_;
+                    int src_idx = (src_y * w + src_x) * channels_ + ch;
+                    // Normalize to [-1, 1]
+                    out[ch * image_size_ * image_size_ + y * image_size_ + x]
+                        = (data[src_idx] / 255.0f - aug_.mean[ch]) / aug_.std[ch];
+                }
+
+        stbi_image_free(data);
+    }
     augment(out);   // apply random augmentations
 }
 
@@ -101,8 +127,13 @@ void DataLoader::prefetch_worker() {
         int bsz = batch_size_;
         size_t img_floats = (size_t)channels_ * image_size_ * image_size_;
         for (int i = 0; i < bsz; i++) {
+            // reset() was previously called here without the mutex, which is a
+            // data race. Instead we inline the reset while no other thread is
+            // touching these fields (the main thread is waiting on cv_ready_).
             if (current_idx_ >= (int)indices_.size()) {
-                reset();
+                std::shuffle(indices_.begin(), indices_.end(),
+                             std::mt19937{std::random_device{}()});
+                current_idx_ = 0;
             }
             std::string path = file_list_[indices_[current_idx_++]];
             load_and_augment(path, pinned_buf_[fill_buf] + i * img_floats);
@@ -129,6 +160,9 @@ float* DataLoader::next_batch() {
 }
 
 void DataLoader::reset() {
+    // NOTE: Only call this from within prefetch_worker(), where indices_ and
+    // current_idx_ are already accessed under the protocol of the condition
+    // variables (main thread is blocked waiting on cv_ready_).
     std::shuffle(indices_.begin(), indices_.end(),
                  std::mt19937{std::random_device{}()});
     current_idx_ = 0;

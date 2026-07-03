@@ -25,9 +25,8 @@ __global__ void layernorm_fwd_kernel(
 
         if (threadIdx.x < s){
             sdata[threadIdx.x] += sdata[threadIdx.x + s];
-            __syncthreads();
         }
-        
+        __syncthreads();
     }
     float mean = sdata[0] / d_model;
 
@@ -44,8 +43,8 @@ correction in layer norm).*/
     for(int s = blockDim.x / 2; s > 0; s >>= 1){
         if(threadIdx.x < s){
             sdata[threadIdx.x] += sdata[threadIdx.x + s];
-            __syncthreads();
         }
+        __syncthreads();
     }
     float inv_std = rsqrtf(sdata[0] / d_model +eps); // "rsqrtf" is CUDA intrinsic for 1/sqrtf, which is faster than computing sqrtf and then taking reciprocal. inv_std reciprocal std deviation, cuz the normalization step multiplies by it rather than dividing, mult is faster than division on GPU.
     // "sdata[0] / d_model + eps" variance + epsilon, the eps prevents rsqrtf(0).
@@ -87,8 +86,8 @@ __global__ void layernorm_backward_kernel(float* dx, float* dgamma, float* dbeta
     for (int s = blockDim.x/2; s > 0; s >>= 1){
         if (threadIdx.x < s){
             sdata[threadIdx.x] += sdata[threadIdx.x + s];
-            __syncthreads();
         }
+        __syncthreads();
     }
     float mean = sdata[0] / d_model;
 
@@ -103,8 +102,8 @@ __global__ void layernorm_backward_kernel(float* dx, float* dgamma, float* dbeta
     for(int s = blockDim.x / 2; s > 0; s >>= 1){
         if(threadIdx.x < s){
             sdata[threadIdx.x] += sdata[threadIdx.x + s];
-            __syncthreads();
         }
+        __syncthreads();
     }
     float inv_std = rsqrtf(sdata[0] / d_model + eps);
 

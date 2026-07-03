@@ -19,8 +19,8 @@ __global__ void softmax_kernel(float*x, int cols){
 
         if(threadIdx.x < stride){
             sdata[threadIdx.x] = fmaxf(sdata[threadIdx.x], sdata[threadIdx.x + stride]);
-            __syncthreads();
         }
+        __syncthreads();
     }
     float row_max = sdata[0]; 
     /*parallel tree reduction - > finds maximum across blocks 
@@ -44,9 +44,8 @@ __global__ void softmax_kernel(float*x, int cols){
     for(int stride = blockDim.x / 2; stride > 0; stride >>= 1){
         if(threadIdx.x < stride){
             sdata[threadIdx.x] += sdata[threadIdx.x + stride];
-            __syncthreads();
-        
         }
+        __syncthreads();
     }// another parallel reduction same as above, now for sum instead of max
     float row_sum = sdata[0];
 
@@ -64,6 +63,43 @@ void softmax(float* input, int rows, int cols){
 }
 
 void attention_softmax(float* scores, int batch, int heads, int seq_len){
-    int rows =batch * heads * seq_len;
-    softmax (scores, rows, seq_len); 
+    int rows = batch * heads * seq_len;
+    softmax(scores, rows, seq_len);
+}
+
+// Backward through row-wise softmax.
+// s:   post-softmax weights (rows × cols), already computed in forward pass.
+// ds:  upstream gradient (rows × cols).
+// dx:  output gradient (rows × cols), overwritten.
+// Formula per row: dx[i] = s[i] * (ds[i] - sum_j(ds[j] * s[j]))
+__global__ void softmax_backward_kernel(float* dx, const float* s, const float* ds, int cols) {
+    extern __shared__ float sdata[];
+    int row = blockIdx.x;
+    const float* s_row  = s  + row * cols;
+    const float* ds_row = ds + row * cols;
+    float*       dx_row = dx + row * cols;
+
+    // Compute dot product sum_j(ds[j] * s[j]) for this row
+    float dot = 0.0f;
+    for (int i = threadIdx.x; i < cols; i += blockDim.x)
+        dot += ds_row[i] * s_row[i];
+    sdata[threadIdx.x] = dot;
+    __syncthreads();
+    for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) sdata[threadIdx.x] += sdata[threadIdx.x + stride];
+        __syncthreads();
+    }
+    float row_dot = sdata[0];
+
+    for (int i = threadIdx.x; i < cols; i += blockDim.x)
+        dx_row[i] = s_row[i] * (ds_row[i] - row_dot);
+}
+
+void attention_softmax_backward(float* dx, const float* s, const float* ds,
+                                int batch, int heads, int seq_len)
+{
+    int rows    = batch * heads * seq_len;
+    int threads = 256;
+    size_t shared = threads * sizeof(float);
+    softmax_backward_kernel<<<rows, threads, shared>>>(dx, s, ds, seq_len);
 }

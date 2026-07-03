@@ -1,52 +1,54 @@
-//kernel implementation for the attention mechanism of the transformer.
+#pragma once
 
-/* self attention for one head -
+/*
+ * Multi-head self-attention:
+ *
+ *   Q = X*W_Q + b_Q,  K = X*W_K + b_K,  V = X*W_V + b_V
+ *   scores = softmax( Q_h * K_h^T / sqrt(d_k) )      per head
+ *   out    = concat(scores * V_h) * W_O + b_O
+ *
+ * Q, K, V are first projected to (total × d_model), then split into
+ * num_heads heads of size d_k = d_model/num_heads.
+ */
 
-Q = X*W_Q, K = X*W_K, V = X*W_V, Q = query, K = key, V = value, where W_Q, W_K, W_V are learnable weight matrices. X is the input sequence (batch x seq_len x d_model).
-scores = QxK^T / sqrt(d_k)  (d_k = dimension of K, scaling factor to prevent large dot product values)
-weights = softmax(scores) (haha full circle -> softmax converts attention scores to probs/weights)
-output = weights x V (weighted sum of values based on attention weights)
-
-
-
-Multi-head self attentions => do this H(head.. hehe) times in parallel with different W_Q, W_K, W_V for each head, then concat outputs and project with W_O to get final output of the multi-head attention layer.
-*/
-
-struct AttentionParams{
-    float* W_Q;// (d_model x d_model)
-    float* W_K;
-    float* W_V;
-    float* W_O;
-    float* b_Q;// (d_model,) one dimensional bias.
-    float* b_K;
-    float* b_V;
-    float* b_O;
-    float* dW_Q; float* dW_K; float* dW_V; float* dW_O;
+struct AttentionParams {
+    float* W_Q; float* W_K; float* W_V; float* W_O;  // (d_model × d_model)
+    float* b_Q; float* b_K; float* b_V; float* b_O;  // (d_model,)
+    float* dW_Q; float* dW_K; float* dW_V; float* dW_O; // gradient counterparts
     float* db_Q; float* db_K; float* db_V; float* db_O;
-}; //dW_x derivative counteparts, for backward pass.
+};
 
-struct AttentionCache{
-    float* Q;// (batch x seq_len x d_model)
+struct AttentionCache {
+    // ── post-projection activations (total × d_model) ──────────────────────
+    float* Q;
     float* K;
     float* V;
-    float* scores;// (batch x head x seq_len x seq_len)
-    float* input;// (batch x seq_len x seq_len)
-    
-}; // computed during fwd pass and must be kept alive till backward.
-// "scores" is the post-attention weights
+    // ── head-permuted: (batch × heads × seq × d_k) ──────────────────────────
+    // Stored as flat (batch*heads × seq × d_k), head-major layout.
+    float* Q_h;
+    float* K_h;
+    float* V_h;
+    float* Kt_h;  // K transposed to (batch*heads × d_k × seq) for Q*K^T
+    // ── attention weights after softmax (batch*heads × seq × seq) ───────────
+    float* scores;
+    // ── input to this attention layer (total × d_model) ─────────────────────
+    float* input;
+    // ── post-concat, pre-W_O output (total × d_model) ───────────────────────
+    float* proj_in;
+};
 
 void attention_forward(
-    float* output,              // (batch x seq x d_model)
-    AttentionCache* cache,      // filled in for backward use
-    const float* input,         // (batch x seq x d_model)
+    float* output,            // (batch × seq × d_model)
+    AttentionCache* cache,    // filled in for backward use
+    const float* input,       // (batch × seq × d_model)
     const AttentionParams* p,
     int batch, int seq_len, int d_model, int num_heads
 );
 
 void attention_backward(
-    float* d_input,
+    float* d_input,           // gradient passed back to previous layer
     AttentionParams* p,
-    const float* d_output,
+    const float* d_output,    // upstream gradient (batch × seq × d_model)
     const AttentionCache* cache,
     int batch, int seq_len, int d_model, int num_heads
 );
