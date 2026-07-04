@@ -52,7 +52,14 @@ void checkpoint_save(
         write_tensor(f, bp.attn.W_K, D * D);
         write_tensor(f, bp.attn.W_V, D * D);
         write_tensor(f, bp.attn.W_O, D * D);
-        // biases, layer norm params, FFN weights...
+        write_tensor(f, bp.ffn.W1, D * cfg.d_ff);
+        write_tensor(f, bp.ffn.b1, cfg.d_ff);
+        write_tensor(f, bp.ffn.W2, cfg.d_ff * D);
+        write_tensor(f, bp.ffn.b2, D);
+        write_tensor(f, bp.ln1_gamma, D);
+        write_tensor(f, bp.ln1_beta, D);
+        write_tensor(f, bp.ln2_gamma, D);
+        write_tensor(f, bp.ln2_beta, D);
     }
 
     // Decoder weights
@@ -92,6 +99,14 @@ int checkpoint_load(
         read_tensor(f, bp.attn.W_K, D * D);
         read_tensor(f, bp.attn.W_V, D * D);
         read_tensor(f, bp.attn.W_O, D * D);
+        read_tensor(f, bp.ffn.W1, D * cfg->d_ff);
+        read_tensor(f, bp.ffn.b1, cfg->d_ff);
+        read_tensor(f, bp.ffn.W2, cfg->d_ff * D);
+        read_tensor(f, bp.ffn.b2, D);
+        read_tensor(f, bp.ln1_gamma, D);
+        read_tensor(f, bp.ln1_beta, D);
+        read_tensor(f, bp.ln2_gamma, D);
+        read_tensor(f, bp.ln2_beta, D);
     }
 
     read_tensor(f, dec->proj_W, D * PD);

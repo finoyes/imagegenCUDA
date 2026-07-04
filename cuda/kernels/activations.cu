@@ -4,20 +4,20 @@
 #define SQRT_2_pi 0.7978845608f //sqrt(2/pi)
 
 __device__ inline float GeLU_val(float x){
-
+    if (x > 10.0f) return x;
+    if (x < -10.0f) return 0.0f;
     float t = SQRT_2_pi * (x + GeLU_coeff * x * x * x);
     return 0.5f * x * (1.0f + tanhf(t)); //tanhf(single precision tanh) faster than tanh((double)causes implicit widening to double precision) on GPU.
-
 }
 
 __device__ inline float GeLU_deriv(float x){
-
-float t = SQRT_2_pi * (x + GeLU_coeff * x * x * x);
-float tanh_t = tanhf(t);
-float sech2_t = 1.0f - tanh_t * tanh_t; //sech^2(t) = 1 - tanh^2(t)
-float dt_dx = SQRT_2_pi * (1.0f + 3.0f * GeLU_coeff * x * x);
-return 0.5f * (1.0f + tanh_t) + 0.5f * x * sech2_t * dt_dx;
-
+    if (x > 10.0f) return 1.0f;
+    if (x < -10.0f) return 0.0f;
+    float t = SQRT_2_pi * (x + GeLU_coeff * x * x * x);
+    float tanh_t = tanhf(t);
+    float sech2_t = 1.0f - tanh_t * tanh_t; //sech^2(t) = 1 - tanh^2(t)
+    float dt_dx = SQRT_2_pi * (1.0f + 3.0f * GeLU_coeff * x * x);
+    return 0.5f * (1.0f + tanh_t) + 0.5f * x * sech2_t * dt_dx;
 } // d(GeLU)/dx = 0.5 * (1 + tanh(t)) + 0.5 * x * sech^2(t) * dt/dx.
 
 __global__ void GeLU_fwd_kernel(float* output, const float* in, int n) {

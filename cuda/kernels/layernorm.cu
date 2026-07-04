@@ -48,10 +48,12 @@ correction in layer norm).*/
     }
     float inv_std = rsqrtf(sdata[0] / d_model +eps); // "rsqrtf" is CUDA intrinsic for 1/sqrtf, which is faster than computing sqrtf and then taking reciprocal. inv_std reciprocal std deviation, cuz the normalization step multiplies by it rather than dividing, mult is faster than division on GPU.
     // "sdata[0] / d_model + eps" variance + epsilon, the eps prevents rsqrtf(0).
-
+    if (isnan(inv_std) || isinf(inv_std) || inv_std == 0.0f) inv_std = 0.0f;
 
     for(int i = threadIdx.x; i < d_model; i += blockDim.x) {
-    y[i] = gamma[i] * ((x[i] - mean) * inv_std) + beta[i];
+        float x_hat = (x[i] - mean) * inv_std;
+        if (isnan(x_hat) || isinf(x_hat)) x_hat = 0.0f;
+        y[i] = gamma[i] * x_hat + beta[i];
     } // (x[i] - mean) * inv_std) normalized value of x[i] -> x_hat , with mean 0 and std 1.
     // gamma[i]*x_hat + beta[i] the affine transform. gamma and beta are indexed by feature dimension i, NOT by token.means all tokens share same learned scale/shift for all the feature.
 
@@ -106,9 +108,11 @@ __global__ void layernorm_backward_kernel(float* dx, float* dgamma, float* dbeta
         __syncthreads();
     }
     float inv_std = rsqrtf(sdata[0] / d_model + eps);
+    if (isnan(inv_std) || isinf(inv_std) || inv_std == 0.0f) inv_std = 0.0f;
 
     for (int i = threadIdx.x; i < d_model; i += blockDim.x) {
         float x_hat = (x_ptr[i] - mean) * inv_std;
+        if (isnan(x_hat) || isinf(x_hat)) x_hat = 0.0f;
         atomicAdd(&dbeta[i],  dyi[i]);
         atomicAdd(&dgamma[i], dyi[i] * x_hat);
     }
@@ -116,6 +120,7 @@ __global__ void layernorm_backward_kernel(float* dx, float* dgamma, float* dbeta
     float sum_dy = 0.0f, sum_dy_xhat = 0.0f;
     for (int i = threadIdx.x; i < d_model; i += blockDim.x) {
         float x_hat = (x_ptr[i] - mean) * inv_std;
+        if (isnan(x_hat) || isinf(x_hat)) x_hat = 0.0f;
         sum_dy      += dyi[i] * gamma[i];
         sum_dy_xhat += dyi[i] * gamma[i] * x_hat;
     }
@@ -143,6 +148,7 @@ __global__ void layernorm_backward_kernel(float* dx, float* dgamma, float* dbeta
 
     for (int i = threadIdx.x; i < d_model; i += blockDim.x) {
         float x_hat = (x_ptr[i] - mean) * inv_std;
+        if (isnan(x_hat) || isinf(x_hat)) x_hat = 0.0f;
         dxi[i] = inv_std * (dyi[i] * gamma[i] - mean_dy - x_hat * mean_dy_xhat);
     }
 

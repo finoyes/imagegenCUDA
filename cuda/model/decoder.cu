@@ -72,8 +72,6 @@ void decoder_forward(float* output, const float* input, const DecoderParams* par
     dim3 grid_re((PD + 255) / 256, NP, batch);
     patch_reassembler_kernel<<<grid_re, 256>>>(output, d_patches, batch, C, H, W, P, NPH);
 
-    int total = batch * C * H * W;
-    clamp_kernel<<<(total + 255) / 256, 256>>>(output, -1.0f, 1.0f, total);
     cudaFree(d_patches);
 }
 
@@ -90,20 +88,11 @@ void decoder_backward(float* d_input, DecoderParams* params,
     int C   = cfg->channels, H = cfg->image_size, W = cfg->image_size;
     int P   = cfg->patch_size, NPH = H / P;
 
-    int total_img = batch * C * H * W;
-
-    // ── 1. Clamp backward ─────────────────────────────────────────────────────
-    float* d_clamped;
-    cudaMalloc(&d_clamped, (size_t)total_img * sizeof(float));
-    clamp_backward_kernel<<<(total_img+255)/256, 256>>>(
-        d_clamped, d_output, output, -1.0f, 1.0f, total_img);
-
     // ── 2. Scatter image gradient back into patch layout ──────────────────────
     float* d_patches;
     cudaMalloc(&d_patches, (size_t)batch * NP * PD * sizeof(float));
     dim3 grid((PD + 255) / 256, NP, batch);
-    patch_scatter_kernel<<<grid, 256>>>(d_patches, d_clamped, batch, C, H, W, P, NPH);
-    cudaFree(d_clamped);
+    patch_scatter_kernel<<<grid, 256>>>(d_patches, d_output, batch, C, H, W, P, NPH);
 
     // ── 3. proj_W backward ────────────────────────────────────────────────────
     // d_proj_W += input^T * d_patches  (d_model × PD, accumulated)
