@@ -61,4 +61,4 @@ Your loss at step 3000 should be around 0.25-0.35 AND still dropping. The fact t
 Most likely root cause
 The incomplete backward pass in the reference code is almost certainly the issue. Share your actual transformer_backward, attention_backward, and decoder_backward implementations and I can tell you exactly what's missing or broken.
 
-do push all the things like dont push build folder4
+the loss is going Nan from 10k steps, and epoch going past 700 look into this
