@@ -327,8 +327,9 @@ int main(int argc, char** argv) {
         const std::string latest_checkpoint = checkpoint_dir + "/latest.bin";
         if (checkpoint_exists(latest_checkpoint)) {
             start_step = checkpoint_load(latest_checkpoint,
-                                         &enc_params, &tr_params, &dec_params, &cfg);
-            printf("[train] Resuming from checkpoint at step %d\n", start_step);
+                                         &enc_params, &tr_params, &dec_params, &cfg, &opt);
+            printf("[train] Resuming from checkpoint at step %d (opt.step restored to %d)\n",
+                   start_step, opt.step);
         } else {
             printf("[train] No checkpoint found; starting from scratch.\n");
         }
@@ -340,7 +341,10 @@ int main(int argc, char** argv) {
         fflush(stdout);
 
         int step = start_step;
-        for (int epoch = 0; step < total_steps; epoch++) {
+        // Start epoch counter at the correct offset so it reflects real epoch number
+        // across resumes (not resetting to 0 every time training restarts).
+        int start_epoch = (batches_per_epoch > 0) ? (start_step / batches_per_epoch) : 0;
+        for (int epoch = start_epoch; step < total_steps; epoch++) {
             for (int b = 0; b < batches_per_epoch && step < total_steps; b++, step++) {
 
                 float* d_images = loader.next_batch();
@@ -399,9 +403,10 @@ int main(int argc, char** argv) {
                     char ckpt_path[256];
                     snprintf(ckpt_path, 256, "%s/step_%06d.bin",
                              checkpoint_dir.c_str(), step);
-                    checkpoint_save(ckpt_path, &enc_params, &tr_params, &dec_params, cfg, step);
+                    // Save optimizer state so resume doesn't corrupt AdamW bias correction
+                    checkpoint_save(ckpt_path, &enc_params, &tr_params, &dec_params, cfg, step, &opt);
                     checkpoint_save(latest_checkpoint.c_str(), &enc_params, &tr_params,
-                                    &dec_params, cfg, step);
+                                    &dec_params, cfg, step, &opt);
                     printf("[train] Checkpoint saved at step %d\n", step);
                     fflush(stdout);
                 }

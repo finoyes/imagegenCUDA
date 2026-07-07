@@ -5,6 +5,7 @@
 #include "../model/transformer.cuh"
 #include "../model/encoder.cuh"
 #include "../model/decoder.cuh"
+#include "../training/optimizer.cuh"
 
 struct ModelConfig {
     int image_size, patch_size, channels;
@@ -12,25 +13,26 @@ struct ModelConfig {
     int batch_size;
 };
 
-// Save all parameters to a binary file
-// Filename example: "checkpoints/epoch_005.bin"
+// Save all model parameters + optimizer state (step, m, v) to a binary file.
 void checkpoint_save(
     const std::string& path,
     const EncoderParams* enc,
     const TransformerParams* tr,
     const DecoderParams* dec,
     const ModelConfig& cfg,
-    int step
+    int step,
+    const AdamWOptimizer* opt = nullptr   // pass nullptr to skip optimizer state
 );
 
-// Load parameters from file into already-allocated GPU buffers
-// Returns the step number from the checkpoint
+// Load model parameters + optimizer state from file into already-allocated GPU buffers.
+// Returns the step number stored in the checkpoint.
 int checkpoint_load(
     const std::string& path,
     EncoderParams* enc,
     TransformerParams* tr,
     DecoderParams* dec,
-    ModelConfig* cfg
+    ModelConfig* cfg,
+    AdamWOptimizer* opt = nullptr         // pass nullptr to skip optimizer state
 );
 
 bool checkpoint_exists(const std::string& path);

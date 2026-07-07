@@ -24,7 +24,8 @@ static void read_tensor(FILE* f, float* d_ptr, int n) {
 void checkpoint_save(
     const std::string& path,
     const EncoderParams* enc, const TransformerParams* tr,
-    const DecoderParams* dec, const ModelConfig& cfg, int step)
+    const DecoderParams* dec, const ModelConfig& cfg, int step,
+    const AdamWOptimizer* opt)
 {
     FILE* f = fopen(path.c_str(), "wb");
     if (!f) { fprintf(stderr, "cannot open %s\n", path.c_str()); return; }
@@ -66,14 +67,37 @@ void checkpoint_save(
     write_tensor(f, dec->proj_W, D * PD);
     write_tensor(f, dec->proj_b, PD);
 
+    // ── Optimizer state ───────────────────────────────────────────────────────
+    // Written only when opt != nullptr. Tag lets checkpoint_load detect whether
+    // optimizer state is present even on old checkpoints that lack it.
+    uint32_t opt_tag = (opt != nullptr) ? 0x4F505420u : 0u;  // "OPT " or 0
+    fwrite(&opt_tag, sizeof(uint32_t), 1, f);
+
+    if (opt != nullptr) {
+        // Step counter — critical for AdamW bias correction (bc1, bc2)
+        fwrite(&opt->step, sizeof(int), 1, f);
+
+        // Number of parameter tensors (sanity check on load)
+        int num_tensors = (int)opt->states.size();
+        fwrite(&num_tensors, sizeof(int), 1, f);
+
+        // m and v buffers for every registered tensor
+        for (int i = 0; i < num_tensors; i++) {
+            write_tensor(f, opt->states[i].m, opt->sizes[i]);
+            write_tensor(f, opt->states[i].v, opt->sizes[i]);
+        }
+    }
+
     fclose(f);
-    printf("Saved checkpoint: %s (step %d)\n", path.c_str(), step);
+    printf("Saved checkpoint: %s (step %d, optimizer %s)\n",
+           path.c_str(), step, opt ? "included" : "not saved");
 }
 
 int checkpoint_load(
     const std::string& path,
     EncoderParams* enc, TransformerParams* tr,
-    DecoderParams* dec, ModelConfig* cfg)
+    DecoderParams* dec, ModelConfig* cfg,
+    AdamWOptimizer* opt)
 {
     FILE* f = fopen(path.c_str(), "rb");
     if (!f) { fprintf(stderr, "cannot open %s\n", path.c_str()); return -1; }
@@ -111,6 +135,48 @@ int checkpoint_load(
 
     read_tensor(f, dec->proj_W, D * PD);
     read_tensor(f, dec->proj_b, PD);
+
+    // ── Optimizer state ───────────────────────────────────────────────────────
+    uint32_t opt_tag = 0;
+    if (fread(&opt_tag, sizeof(uint32_t), 1, f) == 1 && opt_tag == 0x4F505420u) {
+        // Optimizer state present in this checkpoint
+        int saved_step = 0;
+        fread(&saved_step, sizeof(int), 1, f);
+
+        int num_tensors = 0;
+        fread(&num_tensors, sizeof(int), 1, f);
+
+        if (opt != nullptr) {
+            opt->step = saved_step;
+
+            if (num_tensors == (int)opt->states.size()) {
+                for (int i = 0; i < num_tensors; i++) {
+                    read_tensor(f, opt->states[i].m, opt->sizes[i]);
+                    read_tensor(f, opt->states[i].v, opt->sizes[i]);
+                }
+                printf("Loaded optimizer state (step=%d, tensors=%d)\n",
+                       saved_step, num_tensors);
+            } else {
+                fprintf(stderr,
+                    "[checkpoint] WARNING: optimizer tensor count mismatch "
+                    "(file=%d, current=%d). Skipping optimizer state restore.\n",
+                    num_tensors, (int)opt->states.size());
+                // Still restore the step counter — that's the most critical part
+            }
+        }
+    } else {
+        // Old checkpoint without optimizer state
+        if (opt != nullptr) {
+            // CRITICAL: restore step counter from the model step so AdamW
+            // bias correction (bc1 = 1 - beta1^step) doesn't divide by zero.
+            opt->step = step;
+            fprintf(stderr,
+                "[checkpoint] WARNING: no optimizer state in checkpoint. "
+                "Setting opt.step=%d to avoid bias-correction division by zero. "
+                "Momentum buffers (m, v) are reset — expect a brief loss spike.\n",
+                step);
+        }
+    }
 
     fclose(f);
     printf("Loaded checkpoint: %s (step %d)\n", path.c_str(), step);
