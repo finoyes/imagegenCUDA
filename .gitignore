@@ -2,3 +2,6 @@ data/
 build/
 checkpoints/
 logs/
+transformer.md
+*.ipynb
+transformeerscrth.md
