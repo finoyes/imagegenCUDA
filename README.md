@@ -37,5 +37,24 @@ After that, you can build and run `.cu` or CUDA  files from VS Code.
 
 or just open the project with visual studios.
 
+# 1. Build
+mkdir build && cd build
+cmake .. -DCMAKE_BUILD_TYPE=Release
+make -j$(nproc)
+
+ cmake -B build 
+ cmake --build build --config Release
+
+
+# 2. Preprocess your images
+.\Release\preprocess.exe ..\data\raw ..\data\processed  # reads data/raw/, writes data/processed/
+
+# 3. Train
+.\Release\train.exe 
+Remove-Item checkpoints\* -Force; .\build\Release\train.exe
+      # reads config.json, logs to logs/, saves to checkpoints/
+
+# 4. Generate / reconstruct
+./generate checkpoints/latest.bin path/to/image.jpg output.png
 
 
